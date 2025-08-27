@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini 2.5 Flash Image Preview API Tool</title>
+    <style>
+        :root {
+            --bg-primary: #000000;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --neon-green: #00ff41;
+            --neon-green-dim: #00cc33;
+            --neon-green-bright: #33ff66;
+            --text-primary: #ffffff;
+            --text-secondary: #cccccc;
+            --text-muted: #888888;
+            --border-color: #333333;
+            --error-color: #ff4444;
+            --success-color: #00ff41;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Courier New', monospace;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 2px solid var(--neon-green);
+            border-radius: 10px;
+            background: var(--bg-secondary);
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+        }
+
+        .header h1 {
+            color: var(--neon-green);
+            font-size: 2.5rem;
+            text-shadow: 0 0 10px var(--neon-green);
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .panel h2 {
+            color: var(--neon-green);
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            text-shadow: 0 0 5px var(--neon-green);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--neon-green);
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+        }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .file-upload {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-upload input[type=file] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .file-upload-label {
+            display: block;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border: 2px dashed var(--border-color);
+            border-radius: 4px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-upload-label:hover {
+            border-color: var(--neon-green);
+            color: var(--neon-green);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background: var(--neon-green);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+        }
+
+        .btn:hover {
+            background: var(--neon-green-bright);
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            background: var(--text-muted);
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+            color: var(--neon-green);
+        }
+
+        .advanced-options {
+            margin-top: 20px;
+        }
+
+        .advanced-toggle {
+            color: var(--neon-green);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .advanced-content {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .advanced-content.show {
+            display: block;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .response-panel {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+        }
+
+        .response-content {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 20px;
+            min-height: 200px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+
+        .loading {
+            text-align: center;
+            color: var(--neon-green);
+        }
+
+        .error {
+            color: var(--error-color);
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid var(--error-color);
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .success {
+            color: var(--success-color);
+            background: rgba(0, 255, 65, 0.1);
+            border: 1px solid var(--success-color);
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .file-list {
+            margin-top: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+
+        .file-remove {
+            background: var(--error-color);
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .status-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
+        .status-indicator.connected {
+            background: var(--success-color);
+            color: var(--bg-primary);
+        }
+
+        .status-indicator.disconnected {
+            background: var(--error-color);
+            color: white;
+        }
+
+        /* Image Preview Styles */
+        .image-preview-container {
+            margin-top: 15px;
+            padding: 15px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            display: none;
+        }
+
+        .image-preview-container.show {
+            display: block;
+        }
+
+        .image-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            max-width: 600px;
+        }
+
+        .image-preview-item {
+            position: relative;
+            height: 120px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            background: var(--bg-secondary);
+        }
+
+        .image-preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+        }
+
+        .image-preview-remove {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: var(--error-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.9;
+        }
+
+        .image-preview-remove:hover {
+            opacity: 1;
+            background: #ff3333;
+        }
+
+        .mode-indicator {
+            margin-top: 10px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .mode-indicator.text-to-image {
+            background: rgba(0, 255, 65, 0.1);
+            color: var(--success-color);
+            border: 1px solid var(--success-color);
+        }
+
+        .mode-indicator.image-analysis {
+            background: rgba(0, 191, 255, 0.1);
+            color: #00bfff;
+            border: 1px solid #00bfff;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+
+        .spinner {
+            border: 2px solid var(--bg-tertiary);
+            border-top: 2px solid var(--neon-green);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Gemini 2.5 Flash Image Preview</h1>
+            <p>完整的API调用工具 - 支持所有参数和功能</p>
+        </div>
+
+        <div class="status-indicator" id="statusIndicator">检查连接中...</div>
+
+        <div class="main-content">
+            <!-- Input Panel -->
+            <div class="panel">
+                <h2>📝 输入配置</h2>
+                <form id="geminiForm">
+                    <div class="form-group">
+                        <label for="textPrompt">文本提示词</label>
+                        <textarea id="textPrompt" name="text_prompt" class="form-control" placeholder="输入您的提示词..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="imageUpload">上传图片</label>
+                        <div class="file-upload">
+                            <input type="file" id="imageUpload" name="images" multiple accept="image/*">
+                            <label for="imageUpload" class="file-upload-label">
+                                📁 点击选择图片或拖拽到此处<br>
+                                <small>支持: PNG, JPG, GIF, WebP等格式</small>
+                            </label>
+                        </div>
+                        <div id="fileList" class="file-list"></div>
+                        
+                        <!-- Image Preview Container -->
+                        <div id="imagePreviewContainer" class="image-preview-container">
+                            <h4>📷 图片预览 (最多4张)</h4>
+                            <div id="imagePreviewGrid" class="image-preview-grid"></div>
+                        </div>
+                        
+                        <!-- Mode Indicator -->
+                        <div id="modeIndicator" class="mode-indicator text-to-image">
+                            🎨 文生图模式 - 根据提示词生成图像
+                        </div>
+                    </div>
+
+                    <div class="advanced-options">
+                        <div class="advanced-toggle" onclick="toggleAdvanced()">⚙️ 高级选项</div>
+                        <div id="advancedContent" class="advanced-content">
+                            <div class="form-group">
+                                <label for="model">模型选择</label>
+                                <select id="model" name="model" class="form-control">
+                                    <option value="gemini-2.5-flash-image-preview">Gemini 2.5 Flash Image Preview</option>
+                                </select>
+                            </div>
+
+                            <div class="grid-2">
+                                <div class="form-group">
+                                    <label for="temperature">Temperature (0-2)</label>
+                                    <input type="number" id="temperature" name="temperature" class="form-control" 
+                                           value="1.0" min="0" max="2" step="0.1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="maxTokens">Max Output Tokens</label>
+                                    <input type="number" id="maxTokens" name="max_output_tokens" class="form-control" 
+                                           value="8192" min="1" max="8192">
+                                </div>
+                            </div>
+
+                            <div class="grid-2">
+                                <div class="form-group">
+                                    <label for="topP">Top P (0-1)</label>
+                                    <input type="number" id="topP" name="top_p" class="form-control" 
+                                           value="0.95" min="0" max="1" step="0.01">
+                                </div>
+                                <div class="form-group">
+                                    <label for="topK">Top K</label>
+                                    <input type="number" id="topK" name="top_k" class="form-control" 
+                                           value="40" min="1" max="100">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="responseModalities">输出模式</label>
+                                <select id="responseModalities" name="response_modalities" class="form-control">
+                                    <option value="TEXT">仅文本</option>
+                                    <option value="TEXT,IMAGE">文本 + 图像生成</option>
+                                </select>
+                                <small style="color: var(--text-muted); margin-top: 5px; display: block;">选择"文本 + 图像生成"可让模型根据提示词生成图像</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label>安全设置</label>
+                                <div class="grid-2">
+                                    <select name="safety_harm_category_harassment" class="form-control">
+                                        <option value="BLOCK_NONE">骚扰: 不阻止</option>
+                                        <option value="BLOCK_LOW_AND_ABOVE">骚扰: 阻止低级及以上</option>
+                                        <option value="BLOCK_MEDIUM_AND_ABOVE" selected>骚扰: 阻止中级及以上</option>
+                                        <option value="BLOCK_HIGH_AND_ABOVE">骚扰: 仅阻止高级</option>
+                                    </select>
+                                    <select name="safety_harm_category_hate_speech" class="form-control">
+                                        <option value="BLOCK_NONE">仇恨言论: 不阻止</option>
+                                        <option value="BLOCK_LOW_AND_ABOVE">仇恨言论: 阻止低级及以上</option>
+                                        <option value="BLOCK_MEDIUM_AND_ABOVE" selected>仇恨言论: 阻止中级及以上</option>
+                                        <option value="BLOCK_HIGH_AND_ABOVE">仇恨言论: 仅阻止高级</option>
+                                    </select>
+                                </div>
+                                <div class="grid-2" style="margin-top: 10px;">
+                                    <select name="safety_harm_category_sexually_explicit" class="form-control">
+                                        <option value="BLOCK_NONE">性内容: 不阻止</option>
+                                        <option value="BLOCK_LOW_AND_ABOVE">性内容: 阻止低级及以上</option>
+                                        <option value="BLOCK_MEDIUM_AND_ABOVE" selected>性内容: 阻止中级及以上</option>
+                                        <option value="BLOCK_HIGH_AND_ABOVE">性内容: 仅阻止高级</option>
+                                    </select>
+                                    <select name="safety_harm_category_dangerous_content" class="form-control">
+                                        <option value="BLOCK_NONE">危险内容: 不阻止</option>
+                                        <option value="BLOCK_LOW_AND_ABOVE">危险内容: 阻止低级及以上</option>
+                                        <option value="BLOCK_MEDIUM_AND_ABOVE" selected>危险内容: 阻止中级及以上</option>
+                                        <option value="BLOCK_HIGH_AND_ABOVE">危险内容: 仅阻止高级</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 30px;">
+                        <button type="submit" class="btn" id="generateBtn">🚀 生成内容</button>
+                        <button type="button" class="btn btn-secondary" onclick="testConnection()">🔧 测试连接</button>
+                        <button type="button" class="btn btn-secondary" onclick="clearResponse()">🗑️ 清空响应</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Response Panel -->
+            <div class="panel">
+                <h2>📤 API响应</h2>
+                <div id="responseContent" class="response-content">
+                    等待API响应...
+                </div>
+                <div id="responseInfo" style="margin-top: 15px; font-size: 0.9em; color: var(--text-muted);"></div>
+            </div>
+        </div>
+
+        <!-- Full width response panel for large responses -->
+        <div class="panel response-panel" id="fullResponsePanel" style="display: none;">
+            <h2>📋 完整响应</h2>
+            <div id="fullResponseContent" class="response-content"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+        let isConnected = false;
+
+        // Check API connection on load
+        window.addEventListener('load', function() {
+            testConnection();
+        });
+
+        // File upload handling
+        document.getElementById('imageUpload').addEventListener('change', function(e) {
+            const files = Array.from(e.target.files);
+            files.forEach(file => {
+                if (selectedFiles.length < 4 && !selectedFiles.find(f => f.name === file.name)) {
+                    selectedFiles.push(file);
+                }
+            });
+            updateFileList();
+            updateImagePreview();
+            updateModeIndicator();
+        });
+
+        function updateFileList() {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+            
+            selectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <span>📷 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                    <button type="button" class="file-remove" onclick="removeFile(${index})">删除</button>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        function updateImagePreview() {
+            const previewContainer = document.getElementById('imagePreviewContainer');
+            const previewGrid = document.getElementById('imagePreviewGrid');
+            
+            if (selectedFiles.length === 0) {
+                previewContainer.classList.remove('show');
+                return;
+            }
+            
+            previewContainer.classList.add('show');
+            previewGrid.innerHTML = '';
+            
+            selectedFiles.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const previewItem = document.createElement('div');
+                    previewItem.className = 'image-preview-item';
+                    previewItem.innerHTML = `
+                        <img src="${e.target.result}" alt="${file.name}">
+                        <button type="button" class="image-preview-remove" onclick="removeFile(${index})">×</button>
+                    `;
+                    previewGrid.appendChild(previewItem);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function updateModeIndicator() {
+            const modeIndicator = document.getElementById('modeIndicator');
+            
+            if (selectedFiles.length === 0) {
+                modeIndicator.className = 'mode-indicator text-to-image';
+                modeIndicator.innerHTML = '🎨 文生图模式 - 根据提示词生成图像';
+            } else {
+                modeIndicator.className = 'mode-indicator image-analysis';
+                modeIndicator.innerHTML = `🔍 图像分析模式 - 已上传 ${selectedFiles.length} 张图片`;
+            }
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFileList();
+            updateImagePreview();
+            updateModeIndicator();
+        }
+
+        function toggleAdvanced() {
+            const content = document.getElementById('advancedContent');
+            content.classList.toggle('show');
+        }
+
+        async function testConnection() {
+            const statusIndicator = document.getElementById('statusIndicator');
+            statusIndicator.textContent = '测试连接中...';
+            statusIndicator.className = 'status-indicator';
+
+            try {
+                const response = await fetch('/api/test');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    statusIndicator.textContent = '✅ API连接正常';
+                    statusIndicator.className = 'status-indicator connected';
+                    isConnected = true;
+                    showSuccess('API密钥有效，连接正常！');
+                } else if (data.status === 'quota_exceeded') {
+                    statusIndicator.textContent = '⚠️ 配额已用完';
+                    statusIndicator.className = 'status-indicator';
+                    statusIndicator.style.background = '#ff9500';
+                    statusIndicator.style.color = 'white';
+                    isConnected = false;
+                    showError('⚠️ ' + data.message);
+                } else {
+                    statusIndicator.textContent = '❌ API连接失败';
+                    statusIndicator.className = 'status-indicator disconnected';
+                    isConnected = false;
+                    showError('连接测试失败: ' + data.message);
+                }
+            } catch (error) {
+                statusIndicator.textContent = '❌ 连接错误';
+                statusIndicator.className = 'status-indicator disconnected';
+                isConnected = false;
+                showError('连接测试错误: ' + error.message);
+            }
+        }
+
+        // Form submission
+        document.getElementById('geminiForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!isConnected) {
+                showError('请先确保API连接正常');
+                return;
+            }
+
+            const generateBtn = document.getElementById('generateBtn');
+            const responseContent = document.getElementById('responseContent');
+            const responseInfo = document.getElementById('responseInfo');
+            
+            // Show loading state
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<div class="spinner"></div>生成中...';
+            responseContent.innerHTML = '正在调用API...';
+            responseInfo.innerHTML = '';
+
+            try {
+                const formData = new FormData(this);
+                
+                // Add selected files
+                selectedFiles.forEach(file => {
+                    formData.append('images', file);
+                });
+
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    let responseHtml = data.response;
+                    
+                    // Display generated images if any
+                    if (data.generated_images && data.generated_images.length > 0) {
+                        responseHtml += '<br><br><div style="margin-top: 15px;">';
+                        data.generated_images.forEach(imageName => {
+                            responseHtml += `
+                                <div style="margin-bottom: 10px;">
+                                    <img src="/uploads/${imageName}" alt="Generated Image" 
+                                         style="max-width: 100%; height: auto; border: 1px solid var(--border-color); border-radius: 4px;">
+                                    <br><small style="color: var(--text-muted);">生成的图像: ${imageName}</small>
+                                </div>
+                            `;
+                        });
+                        responseHtml += '</div>';
+                    }
+                    
+                    responseContent.innerHTML = responseHtml;
+                    responseInfo.innerHTML = `
+                        <strong>模型:</strong> ${data.model}<br>
+                        <strong>时间:</strong> ${new Date(data.timestamp).toLocaleString()}<br>
+                        <strong>配置:</strong> Temperature: ${data.config.temperature}, Max Tokens: ${data.config.max_output_tokens}
+                    `;
+                    
+                    if (data.generated_images && data.generated_images.length > 0) {
+                        responseInfo.innerHTML += `<br><strong>生成图片数量:</strong> ${data.generated_images.length}`;
+                    }
+                    
+                    showSuccess('内容生成成功！');
+                } else {
+                    throw new Error(data.error || '未知错误');
+                }
+
+            } catch (error) {
+                responseContent.innerHTML = '错误: ' + error.message;
+                showError('API调用失败: ' + error.message);
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '🚀 生成内容';
+            }
+        });
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.innerHTML = '❌ ' + message;
+            document.querySelector('.container').insertBefore(errorDiv, document.querySelector('.main-content'));
+            
+            setTimeout(() => {
+                errorDiv.remove();
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success';
+            successDiv.innerHTML = '✅ ' + message;
+            document.querySelector('.container').insertBefore(successDiv, document.querySelector('.main-content'));
+            
+            setTimeout(() => {
+                successDiv.remove();
+            }, 3000);
+        }
+
+        function clearResponse() {
+            document.getElementById('responseContent').innerHTML = '等待API响应...';
+            document.getElementById('responseInfo').innerHTML = '';
+        }
+
+        // Drag and drop functionality
+        const fileUploadLabel = document.querySelector('.file-upload-label');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            fileUploadLabel.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            fileUploadLabel.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            fileUploadLabel.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            fileUploadLabel.style.borderColor = 'var(--neon-green)';
+            fileUploadLabel.style.color = 'var(--neon-green)';
+        }
+
+        function unhighlight(e) {
+            fileUploadLabel.style.borderColor = 'var(--border-color)';
+            fileUploadLabel.style.color = 'var(--text-primary)';
+        }
+
+        fileUploadLabel.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = Array.from(dt.files);
+            
+            files.forEach(file => {
+                if (file.type.startsWith('image/') && !selectedFiles.find(f => f.name === file.name)) {
+                    selectedFiles.push(file);
+                }
+            });
+            
+            updateFileList();
+        }
+    </script>
+</body>
+</html>
