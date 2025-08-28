@@ -1,5 +1,5 @@
 # gemini-2.5-flash-image-preview-API
-备份一下，readme懒得写，想用的看截图
+备份一下，readme懒得写
 
 
 <img width="1782" height="1842" alt="17f991f8dbba43e2a4b46c9e3ebe2b14" src="https://github.com/user-attachments/assets/88af47a9-8f9d-429f-a6b3-1ef61eff5c3b" />
