@@ -312,14 +312,15 @@
 
         .image-preview-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(4, 1fr);
             gap: 10px;
-            max-width: 600px;
+            max-width: 400px;
         }
 
         .image-preview-item {
             position: relative;
-            height: 120px;
+            width: 90px;
+            height: 90px;
             border: 1px solid var(--border-color);
             border-radius: 4px;
             overflow: hidden;
@@ -424,7 +425,7 @@
                 <form id="geminiForm">
                     <div class="form-group">
                         <label for="textPrompt">文本提示词</label>
-                        <textarea id="textPrompt" name="text_prompt" class="form-control" placeholder="输入您的提示词..."></textarea>
+                        <textarea id="textPrompt" name="prompt" class="form-control" placeholder="输入您的提示词..."></textarea>
                     </div>
 
                     <div class="form-group">
@@ -469,7 +470,7 @@
                                 <div class="form-group">
                                     <label for="maxTokens">Max Output Tokens</label>
                                     <input type="number" id="maxTokens" name="max_output_tokens" class="form-control" 
-                                           value="8192" min="1" max="8192">
+                                           value="8192" min="1" max="32768">
                                 </div>
                             </div>
 
@@ -477,7 +478,7 @@
                                 <div class="form-group">
                                     <label for="topP">Top P (0-1)</label>
                                     <input type="number" id="topP" name="top_p" class="form-control" 
-                                           value="0.95" min="0" max="1" step="0.01">
+                                           value="0.95" min="0" max="1" step="0.05">
                                 </div>
                                 <div class="form-group">
                                     <label for="topK">Top K</label>
@@ -487,41 +488,52 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="responseModalities">输出模式</label>
-                                <select id="responseModalities" name="response_modalities" class="form-control">
-                                    <option value="TEXT">仅文本</option>
-                                    <option value="TEXT,IMAGE">文本 + 图像生成</option>
+                                <label for="seed">随机种子 (Seed)</label>
+                                <input type="number" id="seed" name="seed" class="form-control" 
+                                       value="42" min="0" max="9999999999" step="1">
+                                <small style="color: var(--text-muted);">
+                                    固定种子值可获得更一致的生成结果
+                                </small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="outputMode">输出模式</label>
+                                <select id="outputMode" name="response_modalities" class="form-control">
+                                    <option value="TEXT">文本 + 图像分析</option>
+                                    <option value="TEXT,IMAGE" selected>文本 + 图像生成</option>
                                 </select>
-                                <small style="color: var(--text-muted); margin-top: 5px; display: block;">选择"文本 + 图像生成"可让模型根据提示词生成图像</small>
+                                <small style="color: var(--text-muted);">
+                                    选择"文本 + 图像生成"可让模型根据提示词生成图像
+                                </small>
                             </div>
 
                             <div class="form-group">
                                 <label>安全设置</label>
                                 <div class="grid-2">
                                     <select name="safety_harm_category_harassment" class="form-control">
-                                        <option value="BLOCK_NONE">骚扰: 不阻止</option>
+                                        <option value="BLOCK_NONE" selected>骚扰: 不阻止</option>
                                         <option value="BLOCK_LOW_AND_ABOVE">骚扰: 阻止低级及以上</option>
-                                        <option value="BLOCK_MEDIUM_AND_ABOVE" selected>骚扰: 阻止中级及以上</option>
+                                        <option value="BLOCK_MEDIUM_AND_ABOVE">骚扰: 阻止中级及以上</option>
                                         <option value="BLOCK_HIGH_AND_ABOVE">骚扰: 仅阻止高级</option>
                                     </select>
                                     <select name="safety_harm_category_hate_speech" class="form-control">
-                                        <option value="BLOCK_NONE">仇恨言论: 不阻止</option>
+                                        <option value="BLOCK_NONE" selected>仇恨言论: 不阻止</option>
                                         <option value="BLOCK_LOW_AND_ABOVE">仇恨言论: 阻止低级及以上</option>
-                                        <option value="BLOCK_MEDIUM_AND_ABOVE" selected>仇恨言论: 阻止中级及以上</option>
+                                        <option value="BLOCK_MEDIUM_AND_ABOVE">仇恨言论: 阻止中级及以上</option>
                                         <option value="BLOCK_HIGH_AND_ABOVE">仇恨言论: 仅阻止高级</option>
                                     </select>
                                 </div>
                                 <div class="grid-2" style="margin-top: 10px;">
                                     <select name="safety_harm_category_sexually_explicit" class="form-control">
-                                        <option value="BLOCK_NONE">性内容: 不阻止</option>
+                                        <option value="BLOCK_NONE" selected>性内容: 不阻止</option>
                                         <option value="BLOCK_LOW_AND_ABOVE">性内容: 阻止低级及以上</option>
-                                        <option value="BLOCK_MEDIUM_AND_ABOVE" selected>性内容: 阻止中级及以上</option>
+                                        <option value="BLOCK_MEDIUM_AND_ABOVE">性内容: 阻止中级及以上</option>
                                         <option value="BLOCK_HIGH_AND_ABOVE">性内容: 仅阻止高级</option>
                                     </select>
                                     <select name="safety_harm_category_dangerous_content" class="form-control">
-                                        <option value="BLOCK_NONE">危险内容: 不阻止</option>
+                                        <option value="BLOCK_NONE" selected>危险内容: 不阻止</option>
                                         <option value="BLOCK_LOW_AND_ABOVE">危险内容: 阻止低级及以上</option>
-                                        <option value="BLOCK_MEDIUM_AND_ABOVE" selected>危险内容: 阻止中级及以上</option>
+                                        <option value="BLOCK_MEDIUM_AND_ABOVE">危险内容: 阻止中级及以上</option>
                                         <option value="BLOCK_HIGH_AND_ABOVE">危险内容: 仅阻止高级</option>
                                     </select>
                                 </div>
@@ -699,6 +711,10 @@
             try {
                 const formData = new FormData(this);
                 
+                // Get text prompt value
+                const textPrompt = document.getElementById('textPrompt').value;
+                formData.set('prompt', textPrompt);
+                
                 // Add selected files
                 selectedFiles.forEach(file => {
                     formData.append('images', file);
@@ -710,26 +726,58 @@
                 });
 
                 const data = await response.json();
+                console.log('🔍 前端收到的响应数据:', data);
 
                 if (data.success) {
-                    let responseHtml = data.response;
+                    let responseHtml = '';
                     
-                    // Display generated images if any
+                    // Debug: Check what data we received
+                    console.log('✅ API调用成功');
+                    console.log('📊 响应数据结构:', {
+                        generated_images: data.generated_images,
+                        generated_image_urls: data.generated_image_urls,
+                        response: data.response
+                    });
+                    
+                    // Prioritize image display
                     if (data.generated_images && data.generated_images.length > 0) {
-                        responseHtml += '<br><br><div style="margin-top: 15px;">';
-                        data.generated_images.forEach(imageName => {
+                        console.log(`🎨 准备显示 ${data.generated_images.length} 张图片`);
+                        responseHtml += '<div style="margin-bottom: 20px;">';
+                        responseHtml += '<h3 style="color: var(--neon-green); margin-bottom: 15px;">🎨 生成的图像</h3>';
+                        
+                        // Use full URLs if available, otherwise fallback to relative paths
+                        const imageUrls = data.generated_image_urls || data.generated_images.map(name => `/uploads/${name}`);
+                        
+                        data.generated_images.forEach((imageName, index) => {
+                            const imageUrl = imageUrls[index] || `/uploads/${imageName}`;
                             responseHtml += `
-                                <div style="margin-bottom: 10px;">
-                                    <img src="/uploads/${imageName}" alt="Generated Image" 
-                                         style="max-width: 100%; height: auto; border: 1px solid var(--border-color); border-radius: 4px;">
-                                    <br><small style="color: var(--text-muted);">生成的图像: ${imageName}</small>
+                                <div style="margin-bottom: 15px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border-color);">
+                                    <img src="${imageUrl}" alt="Generated Image ${index + 1}" 
+                                         style="max-width: 100%; height: auto; border: 2px solid var(--neon-green); border-radius: 6px; display: block; margin: 0 auto;"
+                                         onload="console.log('图片加载成功: ${imageUrl}')"
+                                         onerror="console.error('图片加载失败: ${imageUrl}'); this.style.border='2px solid red'; this.alt='图片加载失败';">
+                                    <div style="text-align: center; margin-top: 8px;">
+                                        <small style="color: var(--neon-green); font-weight: bold;">图像 ${index + 1}</small>
+                                        <br><small style="color: var(--text-muted);">${imageName}</small>
+                                        <br><small style="color: var(--text-secondary); font-size: 10px;">${imageUrl}</small>
+                                        <br><a href="${imageUrl}" target="_blank" style="color: var(--neon-green); text-decoration: none; font-size: 12px;">🔗 在新窗口打开</a>
+                                    </div>
                                 </div>
                             `;
                         });
                         responseHtml += '</div>';
                     }
                     
+                    // Add text response if available
+                    if (data.response && data.response.trim()) {
+                        responseHtml += `<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px;">
+                            <h4 style="color: var(--text-primary); margin-bottom: 10px;">📝 文本响应</h4>
+                            <div style="color: var(--text-secondary);">${data.response}</div>
+                        </div>`;
+                    }
+                    
                     responseContent.innerHTML = responseHtml;
+                    
                     responseInfo.innerHTML = `
                         <strong>模型:</strong> ${data.model}<br>
                         <strong>时间:</strong> ${new Date(data.timestamp).toLocaleString()}<br>
@@ -746,7 +794,19 @@
                 }
 
             } catch (error) {
-                responseContent.innerHTML = '错误: ' + error.message;
+                console.error('❌ 前端错误:', error);
+                console.error('❌ 错误堆栈:', error.stack);
+                responseContent.innerHTML = `
+                    <div style="color: red; padding: 10px; background: var(--bg-secondary); border-radius: 4px; border: 1px solid red;">
+                        <h4>❌ 错误信息</h4>
+                        <p><strong>错误:</strong> ${error.message}</p>
+                        <p><strong>类型:</strong> ${error.name}</p>
+                        <details style="margin-top: 10px;">
+                            <summary style="cursor: pointer;">查看详细信息</summary>
+                            <pre style="font-size: 12px; margin-top: 5px; white-space: pre-wrap;">${error.stack}</pre>
+                        </details>
+                    </div>
+                `;
                 showError('API调用失败: ' + error.message);
             } finally {
                 generateBtn.disabled = false;
@@ -825,6 +885,7 @@
             
             updateFileList();
         }
+
     </script>
 </body>
 </html>
