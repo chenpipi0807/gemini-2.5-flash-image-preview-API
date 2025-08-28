@@ -378,6 +378,57 @@
             border: 1px solid #00bfff;
         }
 
+        /* Image Modal Styles */
+        .image-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            cursor: pointer;
+        }
+
+        .image-modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+            border: 2px solid var(--neon-green);
+            border-radius: 8px;
+        }
+
+        .image-modal-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1001;
+        }
+
+        .image-modal-close:hover {
+            color: var(--neon-green);
+        }
+
+        .generated-image {
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .generated-image:hover {
+            transform: scale(1.02);
+        }
+
         @media (max-width: 768px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -564,6 +615,12 @@
             <h2>📋 完整响应</h2>
             <div id="fullResponseContent" class="response-content"></div>
         </div>
+    </div>
+
+    <!-- Image Modal -->
+    <div id="imageModal" class="image-modal">
+        <span class="image-modal-close">&times;</span>
+        <img id="modalImage" src="" alt="预览图像">
     </div>
 
     <script>
@@ -753,11 +810,13 @@
                             responseHtml += `
                                 <div style="margin-bottom: 15px; padding: 10px; background: var(--bg-tertiary); border-radius: 8px; border: 1px solid var(--border-color);">
                                     <img src="${imageUrl}" alt="Generated Image ${index + 1}" 
+                                         class="generated-image"
                                          style="max-width: 100%; height: auto; border: 2px solid var(--neon-green); border-radius: 6px; display: block; margin: 0 auto;"
+                                         onclick="openImageModal('${imageUrl}')"
                                          onload="console.log('图片加载成功: ${imageUrl}')"
                                          onerror="console.error('图片加载失败: ${imageUrl}'); this.style.border='2px solid red'; this.alt='图片加载失败';">
                                     <div style="text-align: center; margin-top: 8px;">
-                                        <small style="color: var(--neon-green); font-weight: bold;">图像 ${index + 1}</small>
+                                        <small style="color: var(--neon-green); font-weight: bold;">图像 ${index + 1} - 点击预览大图</small>
                                         <br><small style="color: var(--text-muted);">${imageName}</small>
                                         <br><small style="color: var(--text-secondary); font-size: 10px;">${imageUrl}</small>
                                         <br><a href="${imageUrl}" target="_blank" style="color: var(--neon-green); text-decoration: none; font-size: 12px;">🔗 在新窗口打开</a>
@@ -885,6 +944,49 @@
             
             updateFileList();
         }
+
+        // Image modal functions
+        function openImageModal(imageUrl) {
+            const modal = document.getElementById('imageModal');
+            const modalImage = document.getElementById('modalImage');
+            
+            modalImage.src = imageUrl;
+            modal.classList.add('show');
+            
+            // Prevent body scrolling when modal is open
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('imageModal');
+            modal.classList.remove('show');
+            
+            // Restore body scrolling
+            document.body.style.overflow = 'auto';
+        }
+
+        // Close modal when clicking on the modal background or close button
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('imageModal');
+            const closeBtn = document.querySelector('.image-modal-close');
+            
+            // Close when clicking the X button
+            closeBtn.addEventListener('click', closeImageModal);
+            
+            // Close when clicking the modal background (but not the image)
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    closeImageModal();
+                }
+            });
+            
+            // Close when pressing Escape key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && modal.classList.contains('show')) {
+                    closeImageModal();
+                }
+            });
+        });
 
     </script>
 </body>
