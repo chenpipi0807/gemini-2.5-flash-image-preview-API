@@ -6,6 +6,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import google.genai as genai
 from google.genai import types
+from google.genai.errors import APIError
 import base64
 from PIL import Image
 import io
@@ -49,6 +50,90 @@ def save_binary_file(file_name, data):
         f.write(data)
     print(f"File saved to: {file_name}")
 
+def calculate_tokens_and_cost(prompt, uploaded_files, generated_images, model_name):
+    """Calculate input/output tokens and cost based on Gemini API pricing"""
+    
+    # Token counting
+    input_tokens = 0
+    output_tokens = 0
+    
+    # Text input tokens (approximately 4 characters = 1 token)
+    if prompt:
+        input_tokens += len(prompt) // 4
+    
+    # Image input tokens (1024x1024 = 1290 tokens, scale for other sizes)
+    for file in uploaded_files:
+        if file and file.filename != '':
+            # Estimate based on file size - rough approximation
+            # For now, assume average uploaded image = 1290 tokens
+            input_tokens += 1290
+    
+    # Image output tokens (1024x1024 = 1290 tokens each)
+    output_tokens = len(generated_images) * 1290
+    
+    # Cost calculation based on Gemini 2.5 Flash Image Preview pricing
+    # These are approximate rates - adjust based on actual model pricing
+    cost_per_1k_input = 0.0  # Input is often free or very cheap for image models
+    cost_per_1k_output = 0.03  # $0.03 per 1000 tokens for image output
+    
+    input_cost = (input_tokens / 1000) * cost_per_1k_input
+    output_cost = (output_tokens / 1000) * cost_per_1k_output
+    total_cost = input_cost + output_cost
+    
+    return {
+        'input_tokens': input_tokens,
+        'output_tokens': output_tokens,
+        'total_tokens': input_tokens + output_tokens,
+        'input_cost_usd': round(input_cost, 6),
+        'output_cost_usd': round(output_cost, 6),
+        'total_cost_usd': round(total_cost, 6),
+        'cost_breakdown': {
+            'input_text_tokens': len(prompt) // 4 if prompt else 0,
+            'input_image_tokens': input_tokens - (len(prompt) // 4 if prompt else 0),
+            'output_image_tokens': output_tokens,
+            'rate_per_1k_input': cost_per_1k_input,
+            'rate_per_1k_output': cost_per_1k_output
+        }
+    }
+
+def get_error_message(error_code, error_message):
+    """Get user-friendly error message based on Gemini API error codes"""
+    error_messages = {
+        400: "请求参数无效。请检查您的输入参数是否正确。",
+        401: "API密钥无效或已过期。请检查您的API密钥设置。",
+        403: "权限被拒绝。您的API密钥可能没有访问此功能的权限。",
+        404: "请求的模型或资源不存在。请检查模型名称是否正确。",
+        429: "请求频率过高或配额已用完。请稍后重试或检查您的配额限制。",
+        500: "服务器内部错误。这是Google服务端的问题，请稍后重试。",
+        503: "服务暂时不可用。Google服务可能正在维护，请稍后重试。",
+        504: "请求超时。您的请求处理时间过长，请尝试简化请求或稍后重试。"
+    }
+    
+    # 特殊错误类型检查
+    if "RESOURCE_EXHAUSTED" in error_message:
+        return "配额已用完。您的免费配额或付费配额已达到限制，请等待重置或升级计划。"
+    elif "PERMISSION_DENIED" in error_message:
+        return "权限被拒绝。请检查您的API密钥权限或项目设置。"
+    elif "INVALID_ARGUMENT" in error_message:
+        return "请求参数无效。请检查您的提示词、图片格式或其他参数设置。"
+    elif "FAILED_PRECONDITION" in error_message:
+        return "请求条件不满足。请检查模型要求和输入格式。"
+    elif "UNAUTHENTICATED" in error_message:
+        return "身份验证失败。请检查您的API密钥是否正确设置。"
+    elif "CANCELLED" in error_message:
+        return "请求被取消。可能是网络问题或请求被中断。"
+    elif "DEADLINE_EXCEEDED" in error_message:
+        return "请求超时。请尝试减少输入内容或稍后重试。"
+    elif "UNAVAILABLE" in error_message:
+        return "服务暂时不可用。请稍后重试。"
+    elif "safety" in error_message.lower() or "blocked" in error_message.lower():
+        return "内容被安全过滤器阻止。请修改您的提示词，避免可能违反内容政策的内容。"
+    elif "recitation" in error_message.lower():
+        return "内容可能涉及版权问题。请使用更原创的提示词。"
+    
+    # 根据错误代码返回通用消息
+    return error_messages.get(error_code, f"未知错误 (代码: {error_code}): {error_message}")
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -56,6 +141,8 @@ def index():
 @app.route('/api/generate', methods=['POST'])
 def generate_content():
     """Main API endpoint for generating content with Gemini"""
+    start_time = time.time()  # 开始计时
+    
     try:
         api_key = get_api_key()
         if not api_key:
@@ -90,41 +177,55 @@ def generate_content():
         except (ValueError, TypeError):
             seed = 42
         
-        # Safety settings - comprehensive coverage
+        # Safety settings - use form values with reasonable defaults
         safety_settings_list = [
             types.SafetySetting(
                 category='HARM_CATEGORY_HARASSMENT',
-                threshold=request.form.get('safety_harm_category_harassment', 'BLOCK_MEDIUM_AND_ABOVE')
+                threshold=request.form.get('safety_harm_category_harassment', 'BLOCK_NONE')
             ),
             types.SafetySetting(
                 category='HARM_CATEGORY_HATE_SPEECH',
-                threshold=request.form.get('safety_harm_category_hate_speech', 'BLOCK_MEDIUM_AND_ABOVE')
+                threshold=request.form.get('safety_harm_category_hate_speech', 'BLOCK_NONE')
             ),
             types.SafetySetting(
                 category='HARM_CATEGORY_SEXUALLY_EXPLICIT',
-                threshold=request.form.get('safety_harm_category_sexually_explicit', 'BLOCK_MEDIUM_AND_ABOVE')
+                threshold=request.form.get('safety_harm_category_sexually_explicit', 'BLOCK_NONE')
             ),
             types.SafetySetting(
                 category='HARM_CATEGORY_DANGEROUS_CONTENT',
-                threshold=request.form.get('safety_harm_category_dangerous_content', 'BLOCK_MEDIUM_AND_ABOVE')
+                threshold=request.form.get('safety_harm_category_dangerous_content', 'BLOCK_NONE')
             )
         ]
 
         # Initialize client
         client = genai.Client(api_key=api_key)
 
+        # Handle uploaded images first to check count
+        uploaded_files = request.files.getlist('images')
+        
         # Build content parts
         parts = []
         
         # Add text part if provided
         if prompt:
-            parts.append(types.Part.from_text(text=prompt))
-
-        # Handle uploaded images
-        uploaded_files = request.files.getlist('images')
-        for file in uploaded_files:
+            # Different prompts for text-to-image vs image editing
+            if len(uploaded_files) == 0:
+                # Pure text-to-image: use stronger generation commands
+                enhanced_prompt = f"Generate an image: {prompt}\n\nIMPORTANT: You must output an actual image file, not just text description. Create and return the visual content as an image."
+            else:
+                # Image editing: use modification commands
+                enhanced_prompt = f"{prompt}\n\n请直接生成修改后的图像，不要只提供文字说明。"
+            parts.append(types.Part.from_text(text=enhanced_prompt))
+        print(f"📁 处理上传文件: {len(uploaded_files)} 个文件")
+        
+        for i, file in enumerate(uploaded_files):
             if file and file.filename != '' and allowed_file(file.filename):
                 filename = secure_filename(file.filename)
+                file_size = len(file.read())
+                file.seek(0)  # Reset file pointer
+                
+                print(f"  - 文件 {i+1}: {file.filename} ({file_size/1024/1024:.2f} MB)")
+                
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 file.save(file_path)
                 
@@ -152,82 +253,64 @@ def generate_content():
         # Create content
         content = types.Content(role="user", parts=parts)
 
-        # Build generation config with seed support (like ComfyUI)
-        generation_config = {
-            'temperature': temperature,
-            'max_output_tokens': max_output_tokens,
-            'top_p': top_p,
-            'top_k': top_k,
-            'seed': seed
-        }
-
-        # 根据用户选择和上传文件确定响应模式
-        response_modalities = request.form.get('response_modalities', 'TEXT,IMAGE')
-        
-        if not uploaded_files:
-            print("🎨 检测到文本生图模式，强制启用图像生成")
-            modalities = ["TEXT", "IMAGE"]  # 文生图模式
-        else:
-            # 有上传图片时，根据用户选择决定是否生成图像
-            if response_modalities == 'TEXT,IMAGE':
-                print("🖼️ 检测到图像编辑模式，启用图像生成")
-                modalities = ["TEXT", "IMAGE"]  # 图像编辑模式
-            else:
-                print("🔍 检测到图像分析模式，仅文本输出")
-                modalities = ["TEXT"]  # 纯分析模式
+        # 图像生成模式 - 让模型自然决定输出格式
+        print("🎨 图像生成模式")
         
         # Debug: Print API call parameters
-        print(f"🚀 API调用参数:")
+        print("🚀 API调用参数:")
         print(f"  - 模型: {model_name}")
-        print(f"  - 响应模式: {modalities}")
-        print(f"  - 提示词: {prompt[:100] if prompt else 'None'}...")
+        print(f"  - 响应模式: 自动")
+        print(f"  - 提示词: {prompt[:50]}...")
         print(f"  - 上传文件数: {len([f for f in uploaded_files if f and f.filename != ''])}")
         print(f"  - 随机种子: {seed}")
         print(f"  - 温度: {temperature}")
         print(f"  - 最大输出: {max_output_tokens}")
         
-        # Make API call using streaming (required for image generation)
-        stream = client.models.generate_content_stream(
+        start_time = time.time()
+        
+        # For pure text-to-image, force image output
+        config_params = {
+            'temperature': temperature,
+            'seed': seed,
+            'max_output_tokens': max_output_tokens,
+            'safety_settings': safety_settings_list
+        }
+        
+        # Force image generation for text-to-image requests
+        if len([f for f in uploaded_files if f and f.filename != '']) == 0:
+            config_params['response_modalities'] = ['IMAGE']
+            print("  - 强制图像输出模式: 已启用")
+        
+        response = client.models.generate_content(
             model=model_name,
-            contents=[content],
-            config=types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_output_tokens,
-                top_p=top_p,
-                top_k=top_k,
-                seed=seed,
-                safety_settings=safety_settings_list,
-                response_modalities=modalities
-            )
+            contents=[content],  
+            config=types.GenerateContentConfig(**config_params)
         )
+        api_call_duration = time.time() - start_time  
 
-        # Process streaming response - support both text and image outputs
-        response_text = ""
+        # 处理非流式响应 - 只处理图像输出
+        response_text = ""  # 不需要文本响应
         generated_images = []
         file_index = 0
+        text_responses = []  # 收集文本响应用于错误分析
         
-        print(f"🔍 开始处理流式响应...")
+        print(f"🔍 开始处理API响应...")
         
-        for chunk in stream:
-            print(f"📦 收到chunk: {type(chunk)}")
+        # 检查响应结构
+        if (response.candidates and 
+            response.candidates[0].content and 
+            response.candidates[0].content.parts):
             
-            # Skip empty chunks
-            if (chunk.candidates is None or 
-                chunk.candidates[0].content is None or 
-                chunk.candidates[0].content.parts is None):
-                print("  - 跳过空chunk")
-                continue
-            
-            for i, part in enumerate(chunk.candidates[0].content.parts):
+            for i, part in enumerate(response.candidates[0].content.parts):
                 print(f"  - Part {i}: {type(part)}")
                 
-                # Handle image parts first (like official example)
+                # 只处理图像部分
                 if (hasattr(part, 'inline_data') and part.inline_data and 
                     hasattr(part.inline_data, 'data') and part.inline_data.data):
                     try:
                         print(f"🎨 发现图像数据！")
                         
-                        # Save image like official example
+                        # 保存图像
                         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
                         filename = f'generated_image_{timestamp}_{file_index}.png'
                         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -235,21 +318,21 @@ def generate_content():
                         inline_data = part.inline_data
                         data_buffer = inline_data.data
                         
-                        # Get file extension from mime type
+                        # 根据MIME类型确定文件扩展名
                         if hasattr(inline_data, 'mime_type') and inline_data.mime_type:
                             file_extension = mimetypes.guess_extension(inline_data.mime_type)
                             if file_extension:
                                 filename = f'generated_image_{timestamp}_{file_index}{file_extension}'
                                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                         
-                        # Save binary data directly
+                        # 直接保存二进制数据
                         with open(filepath, 'wb') as f:
                             f.write(data_buffer)
                         
                         file_size = os.path.getsize(filepath)
                         print(f"✅ 图片已保存: {filepath} ({file_size} 字节)")
                         
-                        if file_size > 100:  # Valid file
+                        if file_size > 100:  # 有效文件
                             generated_images.append(filename)
                             file_index += 1
                         else:
@@ -259,53 +342,142 @@ def generate_content():
                     except Exception as img_error:
                         print(f"❌ 图片保存失败: {img_error}")
                 
-                # Handle text parts
+                # 收集文本响应用于错误分析
                 elif hasattr(part, 'text') and part.text:
-                    print(f"📝 收到文本: {part.text[:50]}...")
-                    response_text += part.text
-                
-                # Also handle chunk.text for streaming text (fallback)
-                elif hasattr(chunk, 'text') and chunk.text:
-                    print(f"📝 收到流式文本: {chunk.text[:50]}...")
-                    response_text += chunk.text
+                    text_responses.append(part.text)
+                    print(f"📝 收到文本响应: {part.text[:50]}...")
         
-        # Debug: Print response structure
+        # 调试信息
         print(f"🔍 调试信息:")
-        print(f"  - 响应文本长度: {len(response_text)}")
         print(f"  - 生成图片数量: {len(generated_images)}")
         print(f"  - 图片文件名: {generated_images}")
+        print(f"  - 文本响应数量: {len(text_responses)}")
         
-        # Fallback to old method if no parts found
-        if not response_text and not generated_images:
-            response_text = response.text if hasattr(response, 'text') else str(response)
-            print(f"  - 使用备用方法获取响应: {response_text[:100]}...")
+        # 如果没有生成图像但有文本响应，可能是正常的文本对话
+        if not generated_images:
+            print(f"❌ 没有生成任何图像")
+            
+            # 如果有文本响应，显示文本内容
+            if text_responses:
+                response_text = " ".join(text_responses)
+                print(f"📝 收到文本响应: {response_text}")
+                
+                # 返回文本响应而不是错误
+                total_duration = time.time() - start_time
+                
+                # Calculate tokens and cost for text response
+                token_cost_info = calculate_tokens_and_cost(prompt, uploaded_files, [], model_name)
+                # Add text output tokens (approximate)
+                text_output_tokens = len(response_text) // 4
+                token_cost_info['output_tokens'] = text_output_tokens
+                token_cost_info['total_tokens'] = token_cost_info['input_tokens'] + text_output_tokens
+                token_cost_info['output_cost_usd'] = 0.0  # Text output is typically free or very cheap
+                token_cost_info['total_cost_usd'] = token_cost_info['input_cost_usd']
+                
+                result = {
+                    'success': True,
+                    'response': response_text,
+                    'generated_images': [],
+                    'generated_image_urls': [],
+                    'model': model_name,
+                    'timestamp': datetime.now().isoformat(),
+                    'timing': {
+                        'total_duration': round(total_duration, 2),
+                        'api_call_duration': round(api_call_duration, 2),
+                        'processing_duration': round(total_duration - api_call_duration, 2)
+                    },
+                    'tokens': token_cost_info,
+                    'config': {
+                        'temperature': temperature,
+                        'max_output_tokens': max_output_tokens,
+                        'top_p': top_p,
+                        'top_k': top_k,
+                        'seed': seed
+                    }
+                }
+                return jsonify(result)
+            else:
+                # 真正的错误情况：既没有图像也没有文本
+                total_duration = time.time() - start_time
+                return jsonify({
+                    'success': False,
+                    'error': '模型没有返回任何内容，请重试',
+                    'error_code': 500,
+                    'timing': {
+                        'total_duration': round(total_duration, 2),
+                        'api_call_duration': round(api_call_duration, 2),
+                        'processing_duration': round(total_duration - api_call_duration, 2)
+                    }
+                }), 500
         
         # Convert local filenames to full URLs
         base_url = request.url_root.rstrip('/')
         generated_image_urls = [f"{base_url}/uploads/{filename}" for filename in generated_images]
         
+        total_duration = time.time() - start_time  # 总耗时
+        
+        # Calculate tokens and cost
+        token_cost_info = calculate_tokens_and_cost(prompt, uploaded_files, generated_images, model_name)
+        
         result = {
             'success': True,
-            'response': response_text,
+            'response': '',  # 不返回文本响应
             'generated_images': generated_images,
             'generated_image_urls': generated_image_urls,
             'model': model_name,
             'timestamp': datetime.now().isoformat(),
+            'timing': {
+                'total_duration': round(total_duration, 2),
+                'api_call_duration': round(api_call_duration, 2),
+                'processing_duration': round(total_duration - api_call_duration, 2)
+            },
+            'tokens': token_cost_info,
             'config': {
                 'temperature': temperature,
                 'max_output_tokens': max_output_tokens,
                 'top_p': top_p,
-                'top_k': top_k
+                'top_k': top_k,
+                'seed': seed
             }
         }
         
         print(f"📤 返回结果: {len(generated_images)} 张图片")
+        print(f"⏱️ 总耗时: {total_duration:.2f}秒 (API调用: {api_call_duration:.2f}秒)")
 
         return jsonify(result)
 
+    except APIError as e:
+        total_duration = time.time() - start_time
+        error_code = getattr(e, 'code', 500)
+        error_message = str(e)
+        user_friendly_message = get_error_message(error_code, error_message)
+        
+        print(f"❌ Gemini API错误 (代码: {error_code}): {error_message}")
+        print(f"⏱️ 失败耗时: {total_duration:.2f}秒")
+        
+        return jsonify({
+            'error': user_friendly_message,
+            'error_code': error_code,
+            'error_type': 'api_error',
+            'original_error': error_message,
+            'timing': {
+                'total_duration': round(total_duration, 2)
+            }
+        }), error_code if error_code in [400, 401, 403, 404, 429] else 500
+        
     except Exception as e:
-        print(f"❌ API调用失败: {e}")
-        return jsonify({'error': f'API调用失败: {str(e)}'}), 500
+        total_duration = time.time() - start_time
+        print(f"❌ 系统错误: {e}")
+        print(f"⏱️ 失败耗时: {total_duration:.2f}秒")
+        
+        return jsonify({
+            'error': f'系统错误: {str(e)}',
+            'error_code': 500,
+            'error_type': 'system_error',
+            'timing': {
+                'total_duration': round(total_duration, 2)
+            }
+        }), 500
 
 @app.route('/api/models')
 def get_models():

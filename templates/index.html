@@ -498,7 +498,7 @@
                         
                         <!-- Mode Indicator -->
                         <div id="modeIndicator" class="mode-indicator text-to-image">
-                            🎨 文生图模式 - 根据提示词生成图像
+                            🎨 纯图像生成模式 - 专注于创作高质量图像
                         </div>
                     </div>
 
@@ -547,16 +547,6 @@
                                 </small>
                             </div>
 
-                            <div class="form-group">
-                                <label for="outputMode">输出模式</label>
-                                <select id="outputMode" name="response_modalities" class="form-control">
-                                    <option value="TEXT">文本 + 图像分析</option>
-                                    <option value="TEXT,IMAGE" selected>文本 + 图像生成</option>
-                                </select>
-                                <small style="color: var(--text-muted);">
-                                    选择"文本 + 图像生成"可让模型根据提示词生成图像
-                                </small>
-                            </div>
 
                             <div class="form-group">
                                 <label>安全设置</label>
@@ -592,8 +582,8 @@
                         </div>
                     </div>
 
-                    <div class="form-group" style="margin-top: 30px;">
-                        <button type="submit" class="btn" id="generateBtn">🚀 生成内容</button>
+                    <div class="form-group">
+                        <button type="submit" class="btn" id="generateBtn">🎨 生成图像</button>
                         <button type="button" class="btn btn-secondary" onclick="testConnection()">🔧 测试连接</button>
                         <button type="button" class="btn btn-secondary" onclick="clearResponse()">🗑️ 清空响应</button>
                     </div>
@@ -636,10 +626,24 @@
         document.getElementById('imageUpload').addEventListener('change', function(e) {
             const files = Array.from(e.target.files);
             files.forEach(file => {
-                if (selectedFiles.length < 4 && !selectedFiles.find(f => f.name === file.name)) {
+                // Check for duplicates by name AND size
+                const isDuplicate = selectedFiles.find(f => 
+                    f.name === file.name && f.size === file.size
+                );
+                
+                if (selectedFiles.length < 4 && !isDuplicate) {
                     selectedFiles.push(file);
+                    console.log(`添加文件: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
+                } else if (isDuplicate) {
+                    console.log(`跳过重复文件: ${file.name}`);
+                } else {
+                    console.log(`文件数量已达上限 (4张)`);
                 }
             });
+            
+            // Clear the input to allow re-selecting the same files if needed
+            this.value = '';
+            
             updateFileList();
             updateImagePreview();
             updateModeIndicator();
@@ -692,10 +696,10 @@
             
             if (selectedFiles.length === 0) {
                 modeIndicator.className = 'mode-indicator text-to-image';
-                modeIndicator.innerHTML = '🎨 文生图模式 - 根据提示词生成图像';
+                modeIndicator.innerHTML = '🎨 纯图像生成模式 - 根据提示词创作图像';
             } else {
-                modeIndicator.className = 'mode-indicator image-analysis';
-                modeIndicator.innerHTML = `🔍 图像分析模式 - 已上传 ${selectedFiles.length} 张图片`;
+                modeIndicator.className = 'mode-indicator text-to-image';
+                modeIndicator.innerHTML = `🎨 图像编辑模式 - 基于 ${selectedFiles.length} 张参考图片生成新图像`;
             }
         }
 
@@ -761,7 +765,7 @@
             
             // Show loading state
             generateBtn.disabled = true;
-            generateBtn.innerHTML = '<div class="spinner"></div>生成中...';
+            generateBtn.innerHTML = '<div class="spinner"></div>生成图像中...';
             responseContent.innerHTML = '正在调用API...';
             responseInfo.innerHTML = '';
 
@@ -827,49 +831,122 @@
                         responseHtml += '</div>';
                     }
                     
-                    // Add text response if available
+                    // 不显示文本响应，因为我们只关注图像生成
                     if (data.response && data.response.trim()) {
-                        responseHtml += `<div style="margin-top: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 4px;">
-                            <h4 style="color: var(--text-primary); margin-bottom: 10px;">📝 文本响应</h4>
-                            <div style="color: var(--text-secondary);">${data.response}</div>
-                        </div>`;
+                        console.log('收到文本响应但已忽略:', data.response);
                     }
                     
                     responseContent.innerHTML = responseHtml;
                     
-                    responseInfo.innerHTML = `
+                    // Display timing information and other details
+                    let infoHtml = `
                         <strong>模型:</strong> ${data.model}<br>
                         <strong>时间:</strong> ${new Date(data.timestamp).toLocaleString()}<br>
                         <strong>配置:</strong> Temperature: ${data.config.temperature}, Max Tokens: ${data.config.max_output_tokens}
                     `;
                     
-                    if (data.generated_images && data.generated_images.length > 0) {
-                        responseInfo.innerHTML += `<br><strong>生成图片数量:</strong> ${data.generated_images.length}`;
+                    // Add timing information if available
+                    if (data.timing) {
+                        infoHtml += `<br><strong>⏱️ 性能统计:</strong>`;
+                        if (data.timing.total_duration) {
+                            infoHtml += `<br>　• 总耗时: ${data.timing.total_duration.toFixed(3)}秒`;
+                        }
+                        if (data.timing.api_call_duration) {
+                            infoHtml += `<br>　• API调用: ${data.timing.api_call_duration.toFixed(3)}秒`;
+                        }
+                        if (data.timing.processing_duration) {
+                            infoHtml += `<br>　• 处理时间: ${data.timing.processing_duration.toFixed(3)}秒`;
+                        }
                     }
+                    
+                    // Add token usage and cost information
+                    if (data.tokens) {
+                        infoHtml += `<br><strong>💰 Token使用与成本:</strong>`;
+                        infoHtml += `<br>　• 输入Token: ${data.tokens.input_tokens.toLocaleString()}`;
+                        infoHtml += `<br>　• 输出Token: ${data.tokens.output_tokens.toLocaleString()}`;
+                        infoHtml += `<br>　• 总Token: ${data.tokens.total_tokens.toLocaleString()}`;
+                        infoHtml += `<br>　• 本次成本: $${data.tokens.total_cost_usd.toFixed(6)} USD`;
+                        
+                        if (data.tokens.cost_breakdown) {
+                            infoHtml += `<br><strong>📊 成本明细:</strong>`;
+                            if (data.tokens.cost_breakdown.input_text_tokens > 0) {
+                                infoHtml += `<br>　• 文本输入: ${data.tokens.cost_breakdown.input_text_tokens} tokens`;
+                            }
+                            if (data.tokens.cost_breakdown.input_image_tokens > 0) {
+                                infoHtml += `<br>　• 图像输入: ${data.tokens.cost_breakdown.input_image_tokens} tokens`;
+                            }
+                            if (data.tokens.cost_breakdown.output_image_tokens > 0) {
+                                infoHtml += `<br>　• 图像输出: ${data.tokens.cost_breakdown.output_image_tokens} tokens ($${data.tokens.output_cost_usd.toFixed(6)})`;
+                            }
+                        }
+                    }
+                    
+                    if (data.generated_images && data.generated_images.length > 0) {
+                        infoHtml += `<br><strong>生成图片数量:</strong> ${data.generated_images.length}`;
+                    }
+                    
+                    responseInfo.innerHTML = infoHtml;
                     
                     showSuccess('内容生成成功！');
                 } else {
-                    throw new Error(data.error || '未知错误');
+                    // Handle API error with detailed information
+                    let errorMessage = data.error || '未知错误';
+                    let errorDetails = '';
+                    
+                    if (data.error_code) {
+                        errorDetails += `<br><strong>错误代码:</strong> ${data.error_code}`;
+                    }
+                    if (data.error_details) {
+                        errorDetails += `<br><strong>详细信息:</strong> ${data.error_details}`;
+                    }
+                    if (data.timing) {
+                        errorDetails += `<br><strong>调用耗时:</strong> ${data.timing.total_duration ? data.timing.total_duration.toFixed(3) + '秒' : '未知'}`;
+                    }
+                    
+                    responseContent.innerHTML = `
+                        <div style="color: var(--error-color); padding: 15px; background: rgba(255, 68, 68, 0.1); border-radius: 8px; border: 1px solid var(--error-color);">
+                            <h4>❌ API调用失败</h4>
+                            <p><strong>错误信息:</strong> ${errorMessage}</p>
+                            ${errorDetails}
+                        </div>
+                    `;
+                    
+                    showError(errorMessage);
+                    return; // Don't throw, we've handled the error
                 }
 
             } catch (error) {
                 console.error('❌ 前端错误:', error);
                 console.error('❌ 错误堆栈:', error.stack);
+                
+                // Try to parse response as JSON to get detailed error info
+                let errorInfo = { message: error.message, name: error.name };
+                try {
+                    if (error.response) {
+                        const errorData = await error.response.json();
+                        errorInfo = { ...errorInfo, ...errorData };
+                    }
+                } catch (parseError) {
+                    console.log('无法解析错误响应为JSON');
+                }
+                
                 responseContent.innerHTML = `
-                    <div style="color: red; padding: 10px; background: var(--bg-secondary); border-radius: 4px; border: 1px solid red;">
-                        <h4>❌ 错误信息</h4>
-                        <p><strong>错误:</strong> ${error.message}</p>
-                        <p><strong>类型:</strong> ${error.name}</p>
+                    <div style="color: var(--error-color); padding: 15px; background: rgba(255, 68, 68, 0.1); border-radius: 8px; border: 1px solid var(--error-color);">
+                        <h4>❌ 网络或系统错误</h4>
+                        <p><strong>错误:</strong> ${errorInfo.message}</p>
+                        <p><strong>类型:</strong> ${errorInfo.name}</p>
+                        ${errorInfo.error_code ? `<p><strong>错误代码:</strong> ${errorInfo.error_code}</p>` : ''}
+                        ${errorInfo.error_details ? `<p><strong>详细信息:</strong> ${errorInfo.error_details}</p>` : ''}
                         <details style="margin-top: 10px;">
-                            <summary style="cursor: pointer;">查看详细信息</summary>
-                            <pre style="font-size: 12px; margin-top: 5px; white-space: pre-wrap;">${error.stack}</pre>
+                            <summary style="cursor: pointer; color: var(--neon-green);">查看技术详情</summary>
+                            <pre style="font-size: 12px; margin-top: 5px; white-space: pre-wrap; color: var(--text-muted);">${error.stack}</pre>
                         </details>
                     </div>
                 `;
-                showError('API调用失败: ' + error.message);
+                showError('请求失败: ' + errorInfo.message);
             } finally {
                 generateBtn.disabled = false;
-                generateBtn.innerHTML = '🚀 生成内容';
+                generateBtn.innerHTML = '🎨 生成图像';
             }
         });
 
